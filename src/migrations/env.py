@@ -1,10 +1,17 @@
+import asyncio
+import sys
 from logging.config import fileConfig
+from os.path import abspath, dirname
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import pool
+from sqlalchemy.ext.asyncio import create_async_engine
+
+sys.path.insert(0, dirname(dirname(dirname(abspath(__file__)))))
+
 
 from src.core.config import settings
-from src.db.models import Base
+from src.db.models import Base, Comment, Photo, Rating, Tag, User
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -20,7 +27,6 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 target_metadata = Base.metadata
-
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -39,7 +45,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = settings.database_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -49,11 +55,6 @@ def run_migrations_offline() -> None:
 
     with context.begin_transaction():
         context.run_migrations()
-
-
-import asyncio
-
-from sqlalchemy.ext.asyncio import create_async_engine
 
 
 def run_migrations_online() -> None:
@@ -77,3 +78,9 @@ def run_migrations_online() -> None:
             context.run_migrations()
 
     asyncio.run(do_run_migrations())
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
