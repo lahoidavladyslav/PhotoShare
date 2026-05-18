@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.db.database import get_db
-from src.db.models import User
+from src.db.models import Role, User
 from src.repository.users import get_user_by_email
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -34,3 +34,19 @@ async def get_current_user(
         raise credentials_exception
         
     return user
+
+class RoleChecker:
+    """
+    Клас-залежність для перевірки прав доступу.
+    Дозволяє пускати на маршрут лише користувачів із вказаними ролями.
+    """
+    def __init__(self, allowed_roles: list[Role]):
+        self.allowed_roles = allowed_roles
+
+    async def __call__(self, current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role not in self.allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have enough permissions to perform this action"
+            )
+        return current_user
