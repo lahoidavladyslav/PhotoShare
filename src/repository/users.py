@@ -1,8 +1,9 @@
+from libgravatar import Gravatar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.security import get_password_hash
-from src.db.models import User
+from src.db.models import Role, User
 from src.schemas.user import UserCreate
 
 
@@ -19,18 +20,30 @@ async def get_user_by_username(username: str, db: AsyncSession) -> User | None:
     return result.scalar_one_or_none()
 
 async def create_user(body: UserCreate, db: AsyncSession) -> User:
-    """Створює нового користувача, хешує його пароль та зберігає в БД."""
+    stmt = select(User).limit(1)
+    result = await db.execute(stmt)
+    first_user = result.scalar_one_or_none()
+
+    user_role = Role.admin if first_user is None else Role.user
     
-    hashed_password = get_password_hash(body.password)
-    
+    avatar = None
+    try:
+        g = Gravatar(body.email)
+        avatar = g.get_image()
+    except Exception as e:
+        print(f"Error generating gravatar: {e}")
+
     new_user = User(
         username=body.username,
         email=body.email,
-        password=hashed_password,
+        password=get_password_hash(body.password),
+        role=user_role,
+        avatar=avatar, 
+        confirmed=False,
+        is_active=True
     )
     
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
-    
     return new_user
