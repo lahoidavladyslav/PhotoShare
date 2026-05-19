@@ -46,7 +46,10 @@ async def get_photo_by_id(db: AsyncSession, photo_id: int) -> Optional[Photo]:
     stmt = (
         select(Photo)
         .where(Photo.id == photo_id)
-        .options(selectinload(Photo.photo_tags))
+        .options(
+            selectinload(Photo.photo_tags),
+            selectinload(Photo.comments)
+        )
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
