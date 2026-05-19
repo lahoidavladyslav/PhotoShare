@@ -3,6 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
+from src.schemas.comment import CommentResponse
+
 
 class TagResponse(BaseModel):
     id: int
@@ -15,6 +17,7 @@ class PhotoResponse(BaseModel):
     description: Optional[str]
     created_at: datetime
     photo_tags: List[TagResponse]
+    comments: List[CommentResponse] = []
     owner_id: int
 
     model_config = ConfigDict(from_attributes=True)
