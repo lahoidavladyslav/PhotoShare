@@ -103,16 +103,35 @@ async def delete_photo(
 
     await repository_photos.delete_photo(db, photo_id)
     return None
-
-@router.post("/transform/{photo_id}", response_model=TransformResponse, status_code=status.HTTP_200_OK)
+@router.post("/transform", response_model=TransformResponse, status_code=status.HTTP_200_OK)
 async def transform_photo(
     photo_id: int,
-    transform_data: PhotoTransformModel = Body(...),
+    transformation: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Трансформує існуючу світлину та повертає новий URL + QR-код.
+    Apply transformation to photo and generate QR code.
+    
+    Args: 
+        photo_id (int): The ID of the photo to transform. 
+        transformation (str): The transformation to apply. 
+        db (Session): The database session. 
+        current_user (User): The currently authenticated user.
+        
+    Returns: 
+        TransformResponse: The transformed photo details.
+        
+    Raises: 
+        HTTPException: If the photo is not found or transformation fails.
+        
+    **Доступні приклади команд:**
+    * **Аватар (квадрат з фокусом на обличчі):** `c_fill,g_face,h_300,w_300`
+    * **Чорно-білий фільтр:** `e_grayscale`
+    * **Ефект мультфільму:** `e_cartoonify`
+    * **Розмиття:** `e_blur:200`
+    * **Зробити фото круглим:** `r_max`
+    * **Сепія (старе фото):** `e_sepia`
     """
     photo = await repository_photos.get_photo_by_id(db, photo_id)
     if photo is None:
@@ -124,10 +143,7 @@ async def transform_photo(
 
     transformed_url = cloudinary_service.transform_image(
         public_id=public_id,
-        width=transform_data.width,
-        height=transform_data.height,
-        crop=transform_data.crop,
-        effect=transform_data.effect
+        transformation=transformation
     )
 
     qr = qrcode.QRCode(version=1, box_size=10, border=5)

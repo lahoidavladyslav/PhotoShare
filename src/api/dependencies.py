@@ -1,5 +1,8 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import (
+    HTTPAuthorizationCredentials,
+    HTTPBearer,
+)
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,13 +11,15 @@ from src.db.database import get_db
 from src.db.models import Role, User
 from src.repository.users import get_user_by_email
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+security = HTTPBearer()
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), 
+    credentials: HTTPAuthorizationCredentials = Depends(security), 
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """Декодує токен і повертає поточного користувача."""
+    token = credentials.credentials 
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -22,10 +27,17 @@ async def get_current_user(
     )
     
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
+            
+        if payload.get("scope") != "access_token":
+             raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid scope for the token"
+            )
+            
     except JWTError:
         raise credentials_exception
 
@@ -34,6 +46,24 @@ async def get_current_user(
         raise credentials_exception
         
     return user
+
+async def get_current_admin(current_user: User = Depends(get_current_user)):
+    """Перевіряє, чи є поточний користувач адміністратором."""
+    if current_user.role != Role.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Not enough permissions. Admin access required."
+        )
+    return current_user
+
+async def get_current_moderator(current_user: User = Depends(get_current_user)):
+    """Перевіряє, чи є поточний користувач модератором АБО адміністратором."""
+    if current_user.role not in [Role.admin, Role.moderator]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Not enough permissions. Moderator access required."
+        )
+    return current_user
 
 class RoleChecker:
     """

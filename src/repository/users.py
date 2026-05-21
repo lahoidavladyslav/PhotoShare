@@ -47,3 +47,16 @@ async def create_user(body: UserCreate, db: AsyncSession) -> User:
     await db.commit()
     await db.refresh(new_user)
     return new_user
+
+
+async def update_token(user: User, token: str | None, db: AsyncSession) -> None:
+    """Оновлює refresh_token користувача в базі даних."""
+    user.refresh_token = token
+    await db.commit()
+    
+async def confirmed_email(email: str, db: AsyncSession) -> None:
+    """Змінює статус confirmed на True для вказаного користувача."""
+    user = await get_user_by_email(email, db)
+    if user:
+        user.confirmed = True 
+        await db.commit()
