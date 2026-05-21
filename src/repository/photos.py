@@ -37,7 +37,10 @@ async def create_photo(
     stmt = (
         select(Photo)
         .where(Photo.id == new_photo.id)
-        .options(selectinload(Photo.photo_tags)) 
+        .options(
+            selectinload(Photo.photo_tags),
+            selectinload(Photo.comments) 
+        )
     )
     result = await db.execute(stmt)
     return result.scalar_one()

@@ -45,19 +45,12 @@ class CloudinaryService:
         return ""
 
     @staticmethod
-    def transform_image(public_id: str, width: int = None, height: int = None, crop: str = "fill", effect: str = None) -> str:
-        """Генерує URL з трансформаціями."""
-        transformations = {}
-        if width:
-            transformations["width"] = width
-        if height:
-            transformations["height"] = height
-        if crop:
-            transformations["crop"] = crop
-        if effect:
-            transformations["effect"] = effect 
-
-        url, options = cloudinary.utils.cloudinary_url(public_id, **transformations)
+    def transform_image(public_id: str, transformation: str) -> str:
+        """Генерує URL з трансформаціями на основі рядка."""
+        url, options = cloudinary.utils.cloudinary_url(
+            public_id, 
+            raw_transformation=transformation
+        )
         return url
 
 cloudinary_service = CloudinaryService()
