@@ -1,16 +1,17 @@
-from fastapi import (  # <--- Додай ці імпорти
+from datetime import datetime, timezone
+
+from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
     HTTPException,
+    Query,
     Request,
-    Security,
     status,
 )
 from fastapi.security import (
     HTTPAuthorizationCredentials,
     HTTPBearer,
-    OAuth2PasswordRequestForm,
 )
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +24,8 @@ from src.api.dependencies import (
 from src.core.config import settings
 from src.core.security import create_access_token, create_refresh_token, verify_password
 from src.db.database import get_db
-from src.db.models import Role, User
+from src.db.models import User
+from src.repository import users as repository_users
 from src.repository.users import (
     confirmed_email,
     create_user,
@@ -37,6 +39,7 @@ from src.schemas.user import (
     Token,
     UserCreate,
     UserLogin,
+    UserProfileResponse,
     UserResponse,
 )
 from src.services.email import send_email
@@ -155,7 +158,6 @@ async def request_email(
 async def confirm_email_route(token: str, db: AsyncSession = Depends(get_db)):
     """Підтвердження email за допомогою токену з листа."""
     try:
-        # Розшифровуємо токен
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         email = payload.get("sub")
         if email is None:
@@ -182,3 +184,66 @@ async def admin_access(current_user: User = Depends(get_current_admin)):
 async def moderator_access(current_user: User = Depends(get_current_moderator)):
     """Ендпоінт для перевірки доступу модератора."""
     return current_user
+
+@router.get("/{username}", response_model=UserProfileResponse)
+async def read_user_profile(
+    username: str, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Отримати публічний профіль користувача за його юзернеймом."""
+    profile = await repository_users.get_user_profile(username, db)
+    
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+    return profile
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Вихід з системи: занулення refresh_token та блокування поточного access_token."""
+    token = credentials.credentials
+    
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        exp = payload.get("exp")
+        if not exp:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
+            
+        expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
+        
+        await repository_users.add_token_to_blacklist(token, expires_at, db)
+        
+        await repository_users.update_token(current_user, None, db)
+        
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    return {"message": "Successfully logged out"}
+
+@router.patch("/{username}/status", response_model=UserResponse)
+async def change_user_status(
+    username: str,
+    is_active: bool = Query(..., description="True - активний, False - забанений"),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """
+    Змінює статус користувача (Бан/Розбан). 
+    Дозволено ТІЛЬКИ адміністраторам.
+    """
+    if current_admin.username == username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="You cannot change your own status"
+        )
+
+    user = await repository_users.update_user_status(username, is_active, db)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    return user

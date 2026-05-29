@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -45,6 +45,7 @@ async def create_photo(
     result = await db.execute(stmt)
     return result.scalar_one()
 
+
 async def get_photo_by_id(db: AsyncSession, photo_id: int) -> Optional[Photo]:
     stmt = (
         select(Photo)
@@ -56,6 +57,7 @@ async def get_photo_by_id(db: AsyncSession, photo_id: int) -> Optional[Photo]:
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
 
 async def update_photo_description(
     db: AsyncSession, 
@@ -71,6 +73,7 @@ async def update_photo_description(
         await db.refresh(photo)
     return photo
 
+
 async def delete_photo(db: AsyncSession, photo_id: int) -> bool:
     """Видаляє світлину з бази даних."""
     photo = await get_photo_by_id(db, photo_id)
@@ -79,3 +82,29 @@ async def delete_photo(db: AsyncSession, photo_id: int) -> bool:
         await db.commit()
         return True
     return False
+
+
+async def search_photos(query_str: str, skip: int, limit: int, db: AsyncSession) -> List[Photo]:
+    """
+    Шукає світлини за ключовим словом. 
+    Шукає співпадіння в описі (description) АБО в назвах тегів.
+    """
+    stmt = (
+        select(Photo)
+        .outerjoin(Photo.photo_tags)
+        .options(
+            selectinload(Photo.photo_tags),
+            selectinload(Photo.comments)
+        )
+        .where(
+            or_(
+                Photo.description.ilike(f"%{query_str}%"),
+                Tag.name.ilike(f"%{query_str}%")
+            )
+        )
+        .offset(skip)
+        .limit(limit)
+    )
+    
+    result = await db.execute(stmt)
+    return list(result.scalars().unique().all())

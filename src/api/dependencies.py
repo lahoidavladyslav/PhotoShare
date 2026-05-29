@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.db.database import get_db
 from src.db.models import Role, User
-from src.repository.users import get_user_by_email
+from src.repository.users import get_user_by_email, is_token_blacklisted
 
 security = HTTPBearer()
 
@@ -19,6 +19,12 @@ async def get_current_user(
 ) -> User:
     """Декодує токен і повертає поточного користувача."""
     token = credentials.credentials 
+    
+    if await is_token_blacklisted(token, db):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Token is blacklisted. Please log in again."
+        )
     
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -33,7 +39,7 @@ async def get_current_user(
             raise credentials_exception
             
         if payload.get("scope") != "access_token":
-             raise HTTPException(
+            raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, 
                 detail="Invalid scope for the token"
             )

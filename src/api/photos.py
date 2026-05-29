@@ -1,25 +1,28 @@
 import base64
 import io
 import uuid
+from typing import List
 
 import qrcode
 from fastapi import (
     APIRouter,
-    Body,
     Depends,
     File,
     Form,
     HTTPException,
+    Query,
+    Request,
     UploadFile,
     status,
 )
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user
 from src.db.database import get_db
 from src.db.models import Role, User
 from src.repository import photos as repository_photos
-from src.schemas.photo import PhotoResponse, PhotoTransformModel, TransformResponse
+from src.schemas.photo import PhotoResponse, TransformResponse
 from src.services.cloudinary import cloudinary_service
 
 router = APIRouter(prefix="/photos", tags=["Photos"])
@@ -55,6 +58,21 @@ async def upload_photo(
     )
 
     return new_photo
+
+@router.get("/search", response_model=List[PhotoResponse])
+async def search_photos(
+    query: str = Query(..., min_length=2, description="Слово для пошуку в описі або тегах"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Об'єднаний пошук світлин. 
+    Шукає задане слово в описах фотографій та серед їхніх тегів.
+    """
+    photos = await repository_photos.search_photos(query, skip, limit, db)
+    return photos
 
 @router.get("/{photo_id}", response_model=PhotoResponse)
 async def get_photo(
@@ -103,6 +121,7 @@ async def delete_photo(
 
     await repository_photos.delete_photo(db, photo_id)
     return None
+
 @router.post("/transform", response_model=TransformResponse, status_code=status.HTTP_200_OK)
 async def transform_photo(
     photo_id: int,
@@ -161,3 +180,28 @@ async def transform_photo(
         "transformed_url": transformed_url,
         "qr_code_url": qr_code_data_uri
     }
+    
+    
+@router.get("/{photo_id}/qrcode", summary="Згенерувати QR-код на сторінку світлини")
+async def get_photo_qr_code(
+        photo_id: int,
+        request: Request, 
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Генерує QR-код, який містить посилання на деталі фотографії 
+    (GET /api/photos/{photo_id}).
+    """
+    photo = await repository_photos.get_photo_by_id(db, photo_id)
+    if photo is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
+
+    app_photo_url = f"{request.base_url}api/photos/{photo_id}"
+
+    qr = qrcode.make(app_photo_url)
+    
+    buf = io.BytesIO()
+    qr.save(buf, format="PNG")
+    buf.seek(0)
+
+    return StreamingResponse(buf, media_type="image/png")
