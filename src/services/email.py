@@ -2,7 +2,6 @@ from pathlib import Path
 
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from fastapi_mail.errors import ConnectionErrors
-from jose import jwt
 from pydantic import EmailStr
 
 from src.core.config import settings

@@ -19,6 +19,7 @@ class PhotoResponse(BaseModel):
     photo_tags: List[TagResponse]
     comments: List[CommentResponse] = []
     owner_id: int
+    average_rating: float
 
     model_config = ConfigDict(from_attributes=True)
     

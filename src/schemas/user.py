@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -35,3 +36,14 @@ class RequestEmail(BaseModel):
     
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+    
+class UserProfileResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    avatar: Optional[str]
+    created_at: datetime
+    role: str
+    photos_count: int
+    
+    model_config = ConfigDict(from_attributes=True)
